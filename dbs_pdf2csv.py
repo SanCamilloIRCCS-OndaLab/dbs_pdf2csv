@@ -146,14 +146,28 @@ def check(condition, port_name, message):
         raise ValueError(f"Port {port_name}: {message}")
 
 
-def process_pdf(pdf_path, page_no=2):
-    """Estrae i dati da un PDF, scrive il CSV accanto al PDF e restituisce i record."""
+PAGE_KEYWORDS = {"Configuration", "IPG", "Model", "Serial", "Firmware", "Port", "Hemisphere"}
+
+
+def find_page(pdf):
+    """Numero (da 1) dell'unica pagina che contiene tutte le PAGE_KEYWORDS."""
+    found = [i for i, p in enumerate(pdf.pages, start=1)
+             if PAGE_KEYWORDS <= {w.rstrip(":") for w in (p.extract_text() or "").split()}]
+    if len(found) != 1:
+        raise ValueError(f"attesa una sola pagina con {sorted(PAGE_KEYWORDS)}, trovate: {found}")
+    return found[0]
+
+
+def process_pdf(pdf_path, page_no=None):
+    """Estrae i dati da un PDF, scrive il CSV accanto al PDF e restituisce i record.
+    Senza page_no la pagina viene cercata con find_page."""
     with pdfplumber.open(pdf_path) as pdf:
+        page_no = page_no or find_page(pdf)
         page = pdf.pages[page_no - 1]
         info = {"Visit Date": extract_visit_date(page), **extract_ipg(page)}
+        tables = extract_tables(page)
     for key in ("Visit Date", "Implant Date"):
         info[key] = datetime.strptime(info[key], "%d %b %Y").strftime("%d/%m/%Y")
-        tables = extract_tables(page)
 
     # Verifica incrociata: le due estrazioni indipendenti devono coincidere
     stream = read_tables_stream(pdf_path, page_no)
@@ -193,8 +207,8 @@ def main():
                f"complessivo ({MERGED_NAME}) con una colonna File in più.",
     )
     parser.add_argument("path", type=Path, help="file PDF o cartella da elaborare")
-    parser.add_argument("--page", type=int, default=2,
-                        help="pagina del PDF con le tabelle (default: 2)")
+    parser.add_argument("--page", type=int,
+                        help="pagina del PDF con le tabelle (default: cercata in automatico)")
     args = parser.parse_args()
 
     if args.path.is_file():

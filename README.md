@@ -38,9 +38,12 @@ venv/bin/python dbs_pdf2csv.py report.pdf
 # Cartella: elabora tutti i PDF, anche nelle sottocartelle
 venv/bin/python dbs_pdf2csv.py cartella/
 
-# Se le tabelle non sono a pagina 2
+# Forzare la pagina con le tabelle (di solito non serve)
 venv/bin/python dbs_pdf2csv.py report.pdf --page 3
 ```
+
+La pagina con le tabelle viene cercata in automatico: è l'unica che contiene tutte le
+parole Configuration, IPG, Model, Serial, Firmware, Port e Hemisphere.
 
 Con una cartella lo script scrive:
 
