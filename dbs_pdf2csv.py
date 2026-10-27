@@ -110,9 +110,11 @@ def read_table(page, section, port_name):
     check(table[0][1:] == COLUMNS, port_name, f"intestazione estratta {table[0]}")
     rows = []
     for k, (label, row) in enumerate(zip(ROWS, table[1:]), start=1):
-        # Triangolo: la riga k-esima ha esattamente k valori numerici, poi celle vuote
+        # Triangolo: la riga k-esima ha esattamente k valori numerici, poi celle vuote.
+        # "+9999" = fuori scala: int() lo converte in 9999
         values, empty = row[1:k + 1], row[k + 1:]
-        check(row[0] == label and all(v and v.isdigit() for v in values) and not any(empty),
+        check(row[0] == label and all(v and v.removeprefix("+").isdigit() for v in values)
+              and not any(empty),
               port_name, f"riga {label} non valida: {row}")
         rows.append((label, [int(v) for v in values] + [None] * len(empty)))
     return rows

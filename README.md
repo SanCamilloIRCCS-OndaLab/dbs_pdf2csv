@@ -76,6 +76,10 @@ alla fine elenca i file non elaborati ed esce con codice 1.
 
 `Row` e `Column` sono le etichette della tabella triangolare nel PDF.
 
+Nel PDF le impedenze fuori scala compaiono come `+9999`: nel CSV vengono scritte come
+`9999`. Un valore `9999` va quindi letto come "9999 Ω o più" e non si distingue da una
+misura reale di esattamente 9999 Ω.
+
 ## Controlli
 
 Le tabelle vengono estratte in due modi indipendenti (pdfplumber e pypdf) e i risultati
