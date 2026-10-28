@@ -1,2 +1,1 @@
 pdfplumber==0.11.10
-pypdf==6.21.2

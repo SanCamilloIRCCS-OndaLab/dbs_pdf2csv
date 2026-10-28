@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pdfplumber
-from pypdf import PdfReader
 
 # Etichette fisse delle tabelle triangolari delle impedenze
 COLUMNS = ["case", "E8", "E7", "E6", "E5", "E4", "E3", "E2"]
@@ -31,10 +30,18 @@ def group_rows(words):
     return [sorted(r, key=lambda w: w["x0"]) for r in rows]
 
 
+def first(items, what):
+    """Primo elemento di items; se non ce n'è, errore che dice cosa mancava
+    (next() darebbe un StopIteration senza messaggio)."""
+    for item in items:
+        return item
+    raise ValueError(f"{what} non trovato nella pagina")
+
+
 def extract_visit_date(page):
     """Testo a destra di "Visit Date" sulla stessa riga."""
     words = page.extract_words(keep_blank_chars=True)
-    label = next(w for w in words if w["text"].strip() == "Visit Date")
+    label = first((w for w in words if w["text"].strip() == "Visit Date"), "'Visit Date'")
     return " ".join(w["text"].strip() for w in sorted(words, key=lambda w: w["x0"])
                     if abs(w["top"] - label["top"]) <= ROW_TOL and w["x0"] > label["x1"])
 
@@ -51,7 +58,7 @@ def extract_ipg(page):
     column = group_rows([w for w in words if w["x1"] < port_x])
     texts = [" ".join(w["text"].strip() for w in r) for r in column]
 
-    pos = {lab: next(i for i, t in enumerate(texts) if t.rstrip(":") == lab)
+    pos = {lab: first((i for i, t in enumerate(texts) if t.rstrip(":") == lab), f"IPG: '{lab}'")
            for lab in IPG_LABELS}
     info = {}
     for lab, nxt in zip(IPG_LABELS, IPG_LABELS[1:] + [None]):
@@ -75,7 +82,7 @@ def extract_tables(page):
                              if abs(w["top"] - top) <= ROW_TOL and w["x0"] > port["x1"])
 
         # Emisfero: la parola subito sotto "Hemisphere", nella stessa colonna
-        hemi = next(w for w in section if w["text"] == "Hemisphere")
+        hemi = first((w for w in section if w["text"] == "Hemisphere"), f"Port {port_name}: 'Hemisphere'")
         hemisphere = min(
             (w for w in section if w["top"] > hemi["top"] and abs(w["x0"] - hemi["x0"]) <= COL_TOL),
             key=lambda w: w["top"],
@@ -89,7 +96,7 @@ def extract_tables(page):
 def read_table(page, section, port_name):
     """Tabella triangolare con extract_table: righe e colonne sono ricavate dalla
     posizione delle etichette fisse (COLUMNS in intestazione, ROWS a sinistra)."""
-    case = next(w for w in section if w["text"] == "case")
+    case = first((w for w in section if w["text"] == "case"), f"Port {port_name}: 'case'")
     header = sorted((w for w in section if abs(w["top"] - case["top"]) <= ROW_TOL
                      and w["x0"] >= case["x0"] - COL_TOL and w["text"] in COLUMNS),
                     key=lambda w: w["x0"])
@@ -120,17 +127,19 @@ def read_table(page, section, port_name):
     return rows
 
 
-def read_tables_stream(pdf_path, page_no):
-    """Stesse tabelle lette nell'ordine del testo nel PDF (pypdf), per verifica incrociata:
-    dopo "Port: X" seguono l'intestazione e, per ogni riga Eₖ, l'etichetta e k valori."""
-    lines = [l.strip() for l in PdfReader(pdf_path).pages[page_no - 1].extract_text().splitlines()]
+def read_tables_stream(page):
+    """Stesse tabelle lette nell'ordine del testo nel PDF, per verifica incrociata:
+    dopo "Port: X" seguono l'intestazione e, per ogni riga Eₖ, l'etichetta e k valori.
+    Le parole sono separate da pdfplumber in base alla distanza tra i caratteri
+    (pypdf in alcuni PDF incolla i numeri, es. "29893566")."""
+    tokens = [w["text"] for w in page.extract_words(use_text_flow=True)]
     tables = {}
-    for i, line in enumerate(lines):
-        if not line.startswith("Port:"):
+    for i, token in enumerate(tokens):
+        if token != "Port:":
             continue
-        port_name = line.removeprefix("Port:").strip()
-        tokens = " ".join(lines[i + 1:]).split()
-        pos = tokens.index("case")
+        pos = first((j for j in range(i + 1, len(tokens)) if tokens[j] == "case"),
+                    "'case' dopo 'Port:' (stream)")
+        port_name = " ".join(tokens[i + 1:pos])
         check(tokens[pos:pos + len(COLUMNS)] == COLUMNS, port_name, "intestazione inattesa (stream)")
         pos += len(COLUMNS)
         rows = []
@@ -168,11 +177,11 @@ def process_pdf(pdf_path, page_no=None):
         page = pdf.pages[page_no - 1]
         info = {"Visit Date": extract_visit_date(page), **extract_ipg(page)}
         tables = extract_tables(page)
+        stream = read_tables_stream(page)
     for key in ("Visit Date", "Implant Date"):
         info[key] = datetime.strptime(info[key], "%d %b %Y").strftime("%d/%m/%Y")
 
     # Verifica incrociata: le due estrazioni indipendenti devono coincidere
-    stream = read_tables_stream(pdf_path, page_no)
     check([t["port"] for t in tables] == list(stream), "-", f"porte diverse: {list(stream)}")
     for t in tables:
         check(t["rows"] == stream[t["port"]], t["port"], "extract_table e ordine del testo non coincidono")

@@ -82,7 +82,7 @@ misura reale di esattamente 9999 Ω.
 
 ## Controlli
 
-Le tabelle vengono estratte in due modi indipendenti (pdfplumber e pypdf) e i risultati
+Le tabelle vengono estratte in due modi (griglia ricavata dalle etichette e ordine del testo nel PDF) e i risultati
 devono coincidere; vengono inoltre verificate intestazioni, etichette di riga e
 struttura triangolare. Se qualcosa non torna, il PDF viene scartato con un errore
 invece di produrre dati sbagliati.
